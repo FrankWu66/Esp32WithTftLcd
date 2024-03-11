@@ -43,7 +43,7 @@ void setup() {
 
   // TFT display init
   tft.initR(INITR_GREENTAB); // you might need to use INITR_REDTAB or INITR_BLACKTAB to get correct text colors
-  tft.setRotation(0);
+  tft.setRotation(1);  // 1表示逆時針旋轉90度，2表示旋轉180度，3表示旋轉270度, org: 0
   tft.fillScreen(ST77XX_BLACK);
 
   // cam config
@@ -68,7 +68,7 @@ void setup() {
   config.pin_reset = RESET_GPIO_NUM;
   config.xclk_freq_hz = 20000000;
   config.pixel_format = PIXFORMAT_JPEG;
-  config.frame_size = FRAMESIZE_240X240;
+  config.frame_size =  FRAMESIZE_96X96; //FRAMESIZE_240X240;
   config.jpeg_quality = 10;
   config.fb_count = 1;
 
@@ -95,7 +95,10 @@ void setup() {
 void loop() {
 
   // wait until the button is pressed
-  while (!digitalRead(BTN));
+  while (!digitalRead(BTN)) {
+    showScreen();
+  };
+  tft.fillScreen(ST77XX_BLACK);
   delay(100);
 
   // capture a image and classify it
@@ -104,6 +107,26 @@ void loop() {
   // display result
   Serial.printf("Result: %s\n", result);
   tft_drawtext(4, 120 - 16, result, 2, ST77XX_GREEN);
+}
+
+void showScreen() {
+  camera_fb_t *fb = NULL;
+  fb = esp_camera_fb_get();
+  if (!fb) {
+    Serial.println("Camera capture failed");
+    return false;
+  }
+
+  // --- Convert frame to RGB565 and display on the TFT ---
+  Serial.println("Converting to RGB565 and display on TFT...");
+  uint8_t *rgb565 = (uint8_t *) malloc(96 * 96 * 3); //(uint8_t *) malloc(240 * 240 * 3);
+  jpg2rgb565(fb->buf, fb->len, rgb565, JPG_SCALE_NONE /*org: JPG_SCALE_2X*/); // scale to half size
+  //tft.drawRGBBitmap(0, 0, (uint16_t*)rgb565, 120, 120);
+  tft.drawRGBBitmap(32, 16, (uint16_t*)rgb565, 96, 96);
+
+  // --- Free memory ---
+  rgb565 = NULL;
+  esp_camera_fb_return(fb);
 }
 
 // classify labels
@@ -182,15 +205,18 @@ bool capture() {
   fmt2rgb888(fb->buf, fb->len, fb->format, rgb888_matrix->item);
 
   // --- Resize the RGB888 frame to 96x96 in this example ---
+  /*
   Serial.println("Resizing the frame buffer...");
   resized_matrix = dl_matrix3du_alloc(1, EI_CLASSIFIER_INPUT_WIDTH, EI_CLASSIFIER_INPUT_HEIGHT, 3);
   image_resize_linear(resized_matrix->item, rgb888_matrix->item, EI_CLASSIFIER_INPUT_WIDTH, EI_CLASSIFIER_INPUT_HEIGHT, 3, fb->width, fb->height);
+  */
 
   // --- Convert frame to RGB565 and display on the TFT ---
   Serial.println("Converting to RGB565 and display on TFT...");
-  uint8_t *rgb565 = (uint8_t *) malloc(240 * 240 * 3);
-  jpg2rgb565(fb->buf, fb->len, rgb565, JPG_SCALE_2X); // scale to half size
-  tft.drawRGBBitmap(0, 0, (uint16_t*)rgb565, 120, 120);
+  uint8_t *rgb565 = (uint8_t *) malloc(96 * 96 * 3); //(uint8_t *) malloc(240 * 240 * 3);
+  jpg2rgb565(fb->buf, fb->len, rgb565, JPG_SCALE_NONE /*org: JPG_SCALE_2X*/); // scale to half size
+  //tft.drawRGBBitmap(0, 0, (uint16_t*)rgb565, 120, 120);
+  tft.drawRGBBitmap(32, 16, (uint16_t*)rgb565, 96, 96);
 
   // --- Free memory ---
   rgb565 = NULL;
