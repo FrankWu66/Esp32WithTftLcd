@@ -114,7 +114,7 @@ void showScreen() {
   fb = esp_camera_fb_get();
   if (!fb) {
     Serial.println("Camera capture failed");
-    return false;
+    return;
   }
 
   // --- Convert frame to RGB565 and display on the TFT ---
