@@ -90,8 +90,10 @@ void setup() {
   config.pin_pwdn = PWDN_GPIO_NUM;
   config.pin_reset = RESET_GPIO_NUM;
   config.xclk_freq_hz = 20000000;
-  config.pixel_format = PIXFORMAT_JPEG;
-  config.frame_size =  FRAMESIZE_240X240;
+  //config.pixel_format = PIXFORMAT_JPEG;
+  config.pixel_format = PIXFORMAT_RGB565;
+  //config.frame_size =  FRAMESIZE_240X240;
+  config.frame_size =  FRAMESIZE_96X96;
   config.jpeg_quality = 10;
   config.fb_count = 1;
 
@@ -120,13 +122,20 @@ void setup() {
 // main loop
 void loop() {
   int StartTime, EndTime;
+  camera_fb_t *fb = NULL;
+  fb = esp_camera_fb_get();
+  if (!fb) {
+    Serial.println("Camera capture failed");
+    return;
+  }
   // wait until the button is pressed
   //while (!digitalRead(BTN)) {
-    Serial.println("Start show screen.");
-    StartTime = millis();
-    showScreen();
-    EndTime = millis();
-    Serial.printf("End show screen. spend time: %d ms\n", StartTime - EndTime);
+  Serial.println("Start show screen.");
+  StartTime = millis();
+  showScreen(fb);
+  EndTime = millis();
+  Serial.printf("End show screen. spend time: %d ms\n", StartTime - EndTime);
+  esp_camera_fb_return(fb);
   //};
   //tft.fillScreen(ST77XX_BLACK);
   //delay(1000);
@@ -148,32 +157,33 @@ void loop() {
 */
 }
 
-void showScreen() {
+void showScreen(camera_fb_t *fb) {
   int StartTime, EndTime;
-  //capture_quick();
+/*
   camera_fb_t *fb = NULL;
   fb = esp_camera_fb_get();
   if (!fb) {
     Serial.println("Camera capture failed");
     return;
   }
-
+*/
   // --- Convert frame to RGB565 and display on the TFT ---
   Serial.println("  Converting to RGB565 and display on TFT...");
-  uint8_t *rgb565 = (uint8_t *) malloc(240 * 240 * 3);
+//  uint8_t *rgb565 = (uint8_t *) malloc(240 * 240 * 3);
   //uint8_t *rgb565 = (uint8_t *) malloc(96 * 96 * 3); 
-  StartTime = millis();
-  jpg2rgb565(fb->buf, fb->len, rgb565, JPG_SCALE_2X); // scale to half size
-  EndTime = millis();
-  Serial.printf("  jpg2rgb565() spend time: %d ms\n", StartTime - EndTime);
+//  StartTime = millis();
+//  jpg2rgb565(fb->buf, fb->len, rgb565, JPG_SCALE_2X); // scale to half size
+//  EndTime = millis();
+//  Serial.printf("  jpg2rgb565() spend time: %d ms\n", StartTime - EndTime);
   //jpg2rgb565(fb->buf, fb->len, rgb565, JPG_SCALE_NONE); // scale to half size
-  tft.drawRGBBitmap(0, 0, (uint16_t*)rgb565, 120, 120);
+  //tft.drawRGBBitmap(0, 0, (uint16_t*)rgb565, 120, 120);
+  tft.drawRGBBitmap(0, 0, (uint16_t*)fb->buf, 96, 96);
   //tft.drawRGBBitmap(32, 16, (uint16_t*)rgb565, 96, 96);
 
   // --- Free memory ---
   //rgb565 = NULL;
-  free(rgb565);
-  esp_camera_fb_return(fb);
+//  free(rgb565);
+  //esp_camera_fb_return(fb);  -> since this is a sub function, don't free fb -> the up function has responsibility to free fb
 }
 
 // classify labels
@@ -259,6 +269,8 @@ bool capture() {
   resized_matrix = dl_matrix3du_alloc(1, EI_CLASSIFIER_INPUT_WIDTH, EI_CLASSIFIER_INPUT_HEIGHT, 3);
   image_resize_linear(resized_matrix->item, rgb888_matrix->item, EI_CLASSIFIER_INPUT_WIDTH, EI_CLASSIFIER_INPUT_HEIGHT, 3, fb->width, fb->height);
 
+  showScreen(fb);
+/*
   // --- Convert frame to RGB565 and display on the TFT ---
   Serial.println("Converting to RGB565 and display on TFT...");
   uint8_t *rgb565 = (uint8_t *) malloc(240 * 240 * 3);
@@ -271,6 +283,9 @@ bool capture() {
   // --- Free memory ---
   //rgb565 = NULL;
   free(rgb565);
+*/
+
+  // --- Free memory ---
   dl_matrix3du_free(rgb888_matrix);
   esp_camera_fb_return(fb);
 
