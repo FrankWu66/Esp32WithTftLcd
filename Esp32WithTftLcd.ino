@@ -16,6 +16,7 @@
 #include "image_util.h"
 #include "esp_camera.h"
 #include "camera_pins.h"
+//#include "esp_attr.h"  // for IRAM_ATTR
 
 #include <Adafruit_GFX.h>    // Core graphics library
 #include <Adafruit_ST7735.h> // Hardware-specific library for ST7735
@@ -34,12 +35,34 @@ ei_impulse_result_t result = {0};
 
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCLK, TFT_RST);
 
+int interruptPin = BTN;
+
+// Interrupt Service Routine (IRS) callback function, declare as IRAM_ATTR means put it in RAM (increase meet rate)
+// Note: don't know why... isr need locate above setup()
+void IRAM_ATTR isr_Callback() {  
+  int StartTime, EndTime;
+
+  // capture a image and classify it
+  Serial.println("Start classify.");
+  StartTime = millis();
+  String result = classify();
+  EndTime = millis();
+  Serial.printf("End classify. spend time: %d ms\n", StartTime - EndTime);
+
+  // display result
+  Serial.printf("Result: %s\n", result);
+  tft_drawtext(4, 120 - 16, result, 2, ST77XX_GREEN);
+
+  // wait for next press button to exit ISR (continue show screen)
+  while (!digitalRead(BTN));
+}
+
 // setup
 void setup() {
   Serial.begin(115200);
 
   // button
-  pinMode(4, INPUT);
+  pinMode(BTN, INPUT);
 
   // TFT display init
   tft.initR(INITR_GREENTAB); // you might need to use INITR_REDTAB or INITR_BLACKTAB to get correct text colors
@@ -67,8 +90,10 @@ void setup() {
   config.pin_pwdn = PWDN_GPIO_NUM;
   config.pin_reset = RESET_GPIO_NUM;
   config.xclk_freq_hz = 20000000;
-  config.pixel_format = PIXFORMAT_JPEG;
-  config.frame_size =  FRAMESIZE_240X240;
+  //config.pixel_format = PIXFORMAT_JPEG;
+  config.pixel_format = PIXFORMAT_RGB565;
+  //config.frame_size =  FRAMESIZE_240X240;
+  config.frame_size =  FRAMESIZE_96X96;
   config.jpeg_quality = 10;
   config.fb_count = 1;
 
@@ -87,6 +112,9 @@ void setup() {
     s->set_saturation(s, 0); // lower the saturation
   }
 
+  // set interrupt service routine for button (GPIO 4), trigger: LOW/HIGH/CHANGE/RISING/FALLING, FALLING: when release button 
+  attachInterrupt(digitalPinToInterrupt(interruptPin), isr_Callback, FALLING);  
+
   Serial.println("Camera Ready!...(standby, press button to start)");
   tft_drawtext(4, 4, "Standby", 1, ST77XX_BLUE);
 }
@@ -94,17 +122,24 @@ void setup() {
 // main loop
 void loop() {
   int StartTime, EndTime;
+  camera_fb_t *fb = NULL;
+  fb = esp_camera_fb_get();
+  if (!fb) {
+    Serial.println("Camera capture failed");
+    return;
+  }
   // wait until the button is pressed
-  while (!digitalRead(BTN)) {
-    Serial.println("Start show screen.");
-    StartTime = millis();
-    showScreen();
-    EndTime = millis();
-    Serial.printf("End show screen. spend time: %d ms\n", StartTime - EndTime);
-  };
+  //while (!digitalRead(BTN)) {
+  Serial.println("Start show screen.");
+  StartTime = millis();
+  showScreen(fb);
+  EndTime = millis();
+  Serial.printf("End show screen. spend time: %d ms\n", StartTime - EndTime);
+  esp_camera_fb_return(fb);
+  //};
   //tft.fillScreen(ST77XX_BLACK);
-  delay(1000);
-
+  //delay(1000);
+/*
   // capture a image and classify it
   Serial.println("Start classify.");
   StartTime = millis();
@@ -119,34 +154,36 @@ void loop() {
   // wait for next press button to continue show screen
   while (!digitalRead(BTN));
   delay(1000);
+*/
 }
 
-void showScreen() {
+void showScreen(camera_fb_t *fb) {
   int StartTime, EndTime;
-  //capture_quick();
+/*
   camera_fb_t *fb = NULL;
   fb = esp_camera_fb_get();
   if (!fb) {
     Serial.println("Camera capture failed");
     return;
   }
-
+*/
   // --- Convert frame to RGB565 and display on the TFT ---
   Serial.println("  Converting to RGB565 and display on TFT...");
-  uint8_t *rgb565 = (uint8_t *) malloc(240 * 240 * 3);
+//  uint8_t *rgb565 = (uint8_t *) malloc(240 * 240 * 3);
   //uint8_t *rgb565 = (uint8_t *) malloc(96 * 96 * 3); 
-  StartTime = millis();
-  jpg2rgb565(fb->buf, fb->len, rgb565, JPG_SCALE_2X); // scale to half size
-  EndTime = millis();
-  Serial.printf("  jpg2rgb565() spend time: %d ms\n", StartTime - EndTime);
+//  StartTime = millis();
+//  jpg2rgb565(fb->buf, fb->len, rgb565, JPG_SCALE_2X); // scale to half size
+//  EndTime = millis();
+//  Serial.printf("  jpg2rgb565() spend time: %d ms\n", StartTime - EndTime);
   //jpg2rgb565(fb->buf, fb->len, rgb565, JPG_SCALE_NONE); // scale to half size
-  tft.drawRGBBitmap(0, 0, (uint16_t*)rgb565, 120, 120);
+  //tft.drawRGBBitmap(0, 0, (uint16_t*)rgb565, 120, 120);
+  tft.drawRGBBitmap(0, 0, (uint16_t*)fb->buf, 96, 96);
   //tft.drawRGBBitmap(32, 16, (uint16_t*)rgb565, 96, 96);
 
   // --- Free memory ---
   //rgb565 = NULL;
-  free(rgb565);
-  esp_camera_fb_return(fb);
+//  free(rgb565);
+  //esp_camera_fb_return(fb);  -> since this is a sub function, don't free fb -> the up function has responsibility to free fb
 }
 
 // classify labels
@@ -232,6 +269,8 @@ bool capture() {
   resized_matrix = dl_matrix3du_alloc(1, EI_CLASSIFIER_INPUT_WIDTH, EI_CLASSIFIER_INPUT_HEIGHT, 3);
   image_resize_linear(resized_matrix->item, rgb888_matrix->item, EI_CLASSIFIER_INPUT_WIDTH, EI_CLASSIFIER_INPUT_HEIGHT, 3, fb->width, fb->height);
 
+  showScreen(fb);
+/*
   // --- Convert frame to RGB565 and display on the TFT ---
   Serial.println("Converting to RGB565 and display on TFT...");
   uint8_t *rgb565 = (uint8_t *) malloc(240 * 240 * 3);
@@ -244,6 +283,9 @@ bool capture() {
   // --- Free memory ---
   //rgb565 = NULL;
   free(rgb565);
+*/
+
+  // --- Free memory ---
   dl_matrix3du_free(rgb888_matrix);
   esp_camera_fb_return(fb);
 
@@ -285,3 +327,5 @@ void tft_drawtext(int16_t x, int16_t y, String text, uint8_t font_size, uint16_t
   tft.setTextWrap(true);
   tft.print(strcpy(new char[text.length() + 1], text.c_str()));
 }
+
+
