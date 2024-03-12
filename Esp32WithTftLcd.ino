@@ -93,18 +93,24 @@ void setup() {
 
 // main loop
 void loop() {
-
+  int StartTime, EndTime;
   // wait until the button is pressed
   while (!digitalRead(BTN)) {
     Serial.println("Start show screen.");
+    StartTime = millis();
     showScreen();
-    Serial.println("End show screen.");
+    EndTime = millis();
+    Serial.printf("End show screen. spend time: %d ms\n", StartTime - EndTime);
   };
   //tft.fillScreen(ST77XX_BLACK);
   delay(1000);
 
   // capture a image and classify it
+  Serial.println("Start classify.");
+  StartTime = millis();
   String result = classify();
+  EndTime = millis();
+  Serial.printf("End classify. spend time: %d ms\n", StartTime - EndTime);
 
   // display result
   Serial.printf("Result: %s\n", result);
@@ -116,6 +122,7 @@ void loop() {
 }
 
 void showScreen() {
+  int StartTime, EndTime;
   //capture_quick();
   camera_fb_t *fb = NULL;
   fb = esp_camera_fb_get();
@@ -125,10 +132,13 @@ void showScreen() {
   }
 
   // --- Convert frame to RGB565 and display on the TFT ---
-  Serial.println("Converting to RGB565 and display on TFT...");
+  Serial.println("  Converting to RGB565 and display on TFT...");
   uint8_t *rgb565 = (uint8_t *) malloc(240 * 240 * 3);
   //uint8_t *rgb565 = (uint8_t *) malloc(96 * 96 * 3); 
+  StartTime = millis();
   jpg2rgb565(fb->buf, fb->len, rgb565, JPG_SCALE_2X); // scale to half size
+  EndTime = millis();
+  Serial.printf("  jpg2rgb565() spend time: %d ms\n", StartTime - EndTime);
   //jpg2rgb565(fb->buf, fb->len, rgb565, JPG_SCALE_NONE); // scale to half size
   tft.drawRGBBitmap(0, 0, (uint16_t*)rgb565, 120, 120);
   //tft.drawRGBBitmap(32, 16, (uint16_t*)rgb565, 96, 96);
@@ -141,7 +151,7 @@ void showScreen() {
 
 // classify labels
 String classify() {
-
+  int StartTime, EndTime;
   // run image capture once to force clear buffer
   // otherwise the captured image below would only show up next time you pressed the button!
   capture_quick();
@@ -150,14 +160,17 @@ String classify() {
   if (!capture()) return "Error";
   tft_drawtext(4, 4, "Classifying...", 1, ST77XX_CYAN);
 
-  Serial.println("Getting image...");
+  Serial.println("  Getting image...");
   signal_t signal;
   signal.total_length = EI_CLASSIFIER_INPUT_WIDTH * EI_CLASSIFIER_INPUT_WIDTH;
   signal.get_data = &raw_feature_get_data;
 
-  Serial.println("Run classifier...");
+  Serial.println("  Run classifier...");
   // Feed signal to the classifier
+  StartTime = millis();
   EI_IMPULSE_ERROR res = run_classifier(&signal, &result, false /* debug */);
+  EndTime = millis();
+  Serial.printf("  run_classifier() spend time: %d ms\n", StartTime - EndTime);
   // --- Free memory ---
   dl_matrix3du_free(resized_matrix);
 
