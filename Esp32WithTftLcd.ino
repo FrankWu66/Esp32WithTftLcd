@@ -70,7 +70,7 @@ void setup() {
   config.pixel_format = PIXFORMAT_JPEG;
   config.frame_size =  FRAMESIZE_240X240;
   config.jpeg_quality = 10;
-  config.fb_count = 2;
+  config.fb_count = 1;
 
   // camera init
   esp_err_t err = esp_camera_init(&config);
@@ -100,7 +100,7 @@ void loop() {
     StartTime = millis();
     showScreen();
     EndTime = millis();
-    Serial.printf("End show screen. spend time: %d ms\n", EndTime - StartTime);
+    Serial.printf("End show screen. spend time: %d ms\n", StartTime - EndTime);
   };
   //tft.fillScreen(ST77XX_BLACK);
   delay(1000);
@@ -110,7 +110,7 @@ void loop() {
   StartTime = millis();
   String result = classify();
   EndTime = millis();
-  Serial.printf("End classify. spend time: %d ms\n", EndTime - StartTime);
+  Serial.printf("End classify. spend time: %d ms\n", StartTime - EndTime);
 
   // display result
   Serial.printf("Result: %s\n", result);
@@ -138,7 +138,7 @@ void showScreen() {
   StartTime = millis();
   jpg2rgb565(fb->buf, fb->len, rgb565, JPG_SCALE_2X); // scale to half size
   EndTime = millis();
-  Serial.printf("  jpg2rgb565() spend time: %d ms\n", EndTime - StartTime);
+  Serial.printf("  jpg2rgb565() spend time: %d ms\n", StartTime - EndTime);
   //jpg2rgb565(fb->buf, fb->len, rgb565, JPG_SCALE_NONE); // scale to half size
   tft.drawRGBBitmap(0, 0, (uint16_t*)rgb565, 120, 120);
   //tft.drawRGBBitmap(32, 16, (uint16_t*)rgb565, 96, 96);
@@ -170,7 +170,7 @@ String classify() {
   StartTime = millis();
   EI_IMPULSE_ERROR res = run_classifier(&signal, &result, false /* debug */);
   EndTime = millis();
-  Serial.printf("  run_classifier() spend time: %d ms\n", EndTime - StartTime);
+  Serial.printf("  run_classifier() spend time: %d ms\n", StartTime - EndTime);
   // --- Free memory ---
   dl_matrix3du_free(resized_matrix);
 
