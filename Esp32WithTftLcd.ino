@@ -43,6 +43,7 @@ bool triggerClassify = false;
 void IRAM_ATTR isr_Callback() {  
   // Only run simply code to avoid system crash
   triggerClassify = !triggerClassify;
+  //Serial.printf("triggerClassify: %d \n", triggerClassify);
 }
 
 // setup
@@ -141,7 +142,11 @@ void loop() {
     tft_drawtext(4, 120 - 16, result, 2, ST77XX_GREEN);
 
     // wait for next press button to continue show screen
-    while (triggerClassify);
+    while (triggerClassify){
+      delay (200);
+      //Serial.printf("while triggerClassify: %d \n", triggerClassify);
+    }
+    tft.fillScreen(ST77XX_BLACK);
     //delay(1000);
   }
 }
