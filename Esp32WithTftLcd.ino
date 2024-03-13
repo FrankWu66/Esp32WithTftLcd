@@ -36,25 +36,13 @@ ei_impulse_result_t result = {0};
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCLK, TFT_RST);
 
 int interruptPin = BTN;
+bool triggerClassify = false;
 
 // Interrupt Service Routine (IRS) callback function, declare as IRAM_ATTR means put it in RAM (increase meet rate)
 // Note: don't know why... isr need locate above setup()
 void IRAM_ATTR isr_Callback() {  
-  int StartTime, EndTime;
-
-  // capture a image and classify it
-  Serial.println("Start classify.");
-  StartTime = millis();
-  String result = classify();
-  EndTime = millis();
-  Serial.printf("End classify. spend time: %d ms\n", StartTime - EndTime);
-
-  // display result
-  Serial.printf("Result: %s\n", result);
-  tft_drawtext(4, 120 - 16, result, 2, ST77XX_GREEN);
-
-  // wait for next press button to exit ISR (continue show screen)
-  while (!digitalRead(BTN));
+  // Only run simply code to avoid system crash
+  triggerClassify = !triggerClassify;
 }
 
 // setup
@@ -139,22 +127,23 @@ void loop() {
   //};
   //tft.fillScreen(ST77XX_BLACK);
   //delay(1000);
-/*
+
   // capture a image and classify it
-  Serial.println("Start classify.");
-  StartTime = millis();
-  String result = classify();
-  EndTime = millis();
-  Serial.printf("End classify. spend time: %d ms\n", StartTime - EndTime);
+  if (triggerClassify) {
+    Serial.println("Start classify.");
+    StartTime = millis();
+    String result = classify();
+    EndTime = millis();
+    Serial.printf("End classify. spend time: %d ms\n", StartTime - EndTime);
 
-  // display result
-  Serial.printf("Result: %s\n", result);
-  tft_drawtext(4, 120 - 16, result, 2, ST77XX_GREEN);
+    // display result
+    Serial.printf("Result: %s\n", result);
+    tft_drawtext(4, 120 - 16, result, 2, ST77XX_GREEN);
 
-  // wait for next press button to continue show screen
-  while (!digitalRead(BTN));
-  delay(1000);
-*/
+    // wait for next press button to continue show screen
+    while (triggerClassify);
+    //delay(1000);
+  }
 }
 
 void showScreen(camera_fb_t *fb) {
