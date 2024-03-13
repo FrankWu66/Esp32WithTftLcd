@@ -157,7 +157,7 @@ void showScreen(camera_fb_t *fb) {
   }
 */
   // --- Convert frame to RGB565 and display on the TFT ---
-  Serial.println("  Converting to RGB565 and display on TFT...");
+//  Serial.println("  Converting to RGB565 and display on TFT...");
 //  uint8_t *rgb565 = (uint8_t *) malloc(240 * 240 * 3);
   //uint8_t *rgb565 = (uint8_t *) malloc(96 * 96 * 3); 
 //  StartTime = millis();
@@ -166,7 +166,7 @@ void showScreen(camera_fb_t *fb) {
 //  Serial.printf("  jpg2rgb565() spend time: %d ms\n", EndTime - StartTime);
   //jpg2rgb565(fb->buf, fb->len, rgb565, JPG_SCALE_NONE); // scale to half size
   //tft.drawRGBBitmap(0, 0, (uint16_t*)rgb565, 120, 120);
-  tft.drawRGBBitmap(0, 0, (uint16_t*)fb->buf, 96, 96);
+  tft.drawRGBBitmap(32, 12, (uint16_t*)fb->buf, 96, 96);  // center alignment.
   //tft.drawRGBBitmap(32, 16, (uint16_t*)rgb565, 96, 96);
 
   // --- Free memory ---
@@ -254,10 +254,10 @@ bool capture() {
   fmt2rgb888(fb->buf, fb->len, fb->format, rgb888_matrix->item);
 
   // --- Resize the RGB888 frame to 96x96 in this example ---
-  Serial.println("Resizing the frame buffer...");
-  resized_matrix = dl_matrix3du_alloc(1, EI_CLASSIFIER_INPUT_WIDTH, EI_CLASSIFIER_INPUT_HEIGHT, 3);
-  image_resize_linear(resized_matrix->item, rgb888_matrix->item, EI_CLASSIFIER_INPUT_WIDTH, EI_CLASSIFIER_INPUT_HEIGHT, 3, fb->width, fb->height);
-
+  //Serial.println("Resizing the frame buffer...");
+  //resized_matrix = dl_matrix3du_alloc(1, EI_CLASSIFIER_INPUT_WIDTH, EI_CLASSIFIER_INPUT_HEIGHT, 3);
+  //image_resize_linear(resized_matrix->item, rgb888_matrix->item, EI_CLASSIFIER_INPUT_WIDTH, EI_CLASSIFIER_INPUT_HEIGHT, 3, fb->width, fb->height);
+  resized_matrix = rgb888_matrix; // if do not need to resize, we can use rgb888_matrix to classify directly.
   showScreen(fb);
 /*
   // --- Convert frame to RGB565 and display on the TFT ---
@@ -275,7 +275,7 @@ bool capture() {
 */
 
   // --- Free memory ---
-  dl_matrix3du_free(rgb888_matrix);
+  //dl_matrix3du_free(rgb888_matrix);
   esp_camera_fb_return(fb);
 
   return true;
