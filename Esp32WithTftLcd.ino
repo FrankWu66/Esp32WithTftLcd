@@ -105,7 +105,7 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(interruptPin), isr_Callback, FALLING);  
 
   Serial.println("Camera Ready!...(standby, press button to start)");
-  tft_drawtext(4, 4, "Standby", 1, ST77XX_BLUE);
+  //tft_drawtext(4, 4, "Standby", 1, ST77XX_BLUE);
 }
 
 // main loop
@@ -153,6 +153,7 @@ void loop() {
 
 void showScreen(camera_fb_t *fb) {
   int StartTime, EndTime;
+  unsigned long i = 0;
 /*
   camera_fb_t *fb = NULL;
   fb = esp_camera_fb_get();
@@ -171,8 +172,15 @@ void showScreen(camera_fb_t *fb) {
 //  Serial.printf("  jpg2rgb565() spend time: %d ms\n", EndTime - StartTime);
   //jpg2rgb565(fb->buf, fb->len, rgb565, JPG_SCALE_NONE); // scale to half size
   //tft.drawRGBBitmap(0, 0, (uint16_t*)rgb565, 120, 120);
-  tft.drawRGBBitmap(32, 12, (uint16_t*)fb->buf, 96, 96);  // center alignment.
   //tft.drawRGBBitmap(32, 16, (uint16_t*)rgb565, 96, 96);
+
+  //tft.drawRGBBitmap(32, 12, (uint16_t*)fb->buf, 96, 96);  // center alignment.
+  for (uint8_t y = 0; y < 96; y++) {
+    for (uint8_t x = 0; x < 96; x++) {
+      tft.drawPixel (x+32, y+12, ((fb->buf[2*i]) << 8) | (fb->buf[2*i+1]));
+      i++;
+    }
+  }
 
   // --- Free memory ---
   //rgb565 = NULL;
