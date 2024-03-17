@@ -81,14 +81,12 @@ bool decord_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitma
 {
   // Stop further decoding as image is running off bottom of screen
   if ( y >= tft.height() ) return 0;
-  if (dmaBufferSel) dmaBufferPtr = dmaBuffer2;
-  else dmaBufferPtr = dmaBuffer1;
-  dmaBufferSel = !dmaBufferSel; // Toggle buffer selection
-  //  pushImageDMA() will clip the image block at screen boundaries before initiating DMA
-  tft.pushImageDMA(x, y, w, h, bitmap, dmaBufferPtr); // Initiate DMA - blocking only if last DMA is not complete
-  // The DMA transfer of image block to the TFT is now in progress...
+  //tft.pushImageDMA(x, y, w, h, bitmap, dmaBufferPtr); // Initiate DMA - blocking only if last DMA is not complete
 
-  // Return 1 to decode next block.
+  if (tmpDecordedRgb565 == NULL) return 0;
+
+  memcpy (tmpDecordedRgb565, bitmap, w*h);
+
   return 1;
 }
 
@@ -344,15 +342,17 @@ bool capture() {
 
   Serial.println("TJpgDec.setCallback(decord_output);...");  
   tmpDecordedRgb565 = (uint16_t *) malloc(RGB565_SIZE);
+  tft.setSwapBytes(false);
   TJpgDec.setCallback(decord_output);
   TJpgDec.drawJpg(0, 0, fb->buf, fb->len);
 
   // rollback TJpgDec.setCallback(tft_output);
   Serial.println("rollback TJpgDec.setCallback(tft_output);...");  
+  tft.setSwapBytes(true);
   TJpgDec.setCallback(tft_output);
 
   Serial.println("fmt2rgb888...from TJpegDec RGB5656");  
-  fmt2rgb888((uint8_t *)tmpDecordedRgb565, fb->len, PIXFORMAT_RGB565, rgb888_matrix->item);
+  fmt2rgb888((uint8_t *)tmpDecordedRgb565, fb->width * fb->height * 2, PIXFORMAT_RGB565, rgb888_matrix->item);
 
   //Serial.println("memcpy...");  
   //memcpy (rgb565, fb->buf, fb->len);
