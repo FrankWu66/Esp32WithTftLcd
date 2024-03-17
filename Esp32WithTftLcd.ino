@@ -17,8 +17,12 @@
 #include "esp_camera.h"
 #include "camera_pins.h"
 
-#include <Adafruit_GFX.h>    // Core graphics library
-#include <Adafruit_ST7735.h> // Hardware-specific library for ST7735
+//#include <Adafruit_GFX.h>    // Core graphics library
+//#include <Adafruit_ST7735.h> // Hardware-specific library for ST7735
+
+#include "SPI.h"
+#include <TFT_eSPI.h>              // Hardware-specific library
+#include <TJpg_Decoder.h>
 
 #define TFT_SCLK 14 // SCL
 #define TFT_MOSI 13 // SDA
@@ -35,16 +39,58 @@
 
 // after rotate 270 degrees
 #define TFT_LCD_WIDTH   160
-#define TFT_LCD_HEIGHT  120
+#define TFT_LCD_HEIGHT  128
 
 dl_matrix3du_t *resized_matrix = NULL;
 ei_impulse_result_t result = {0};
 
-Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCLK, TFT_RST);
-uint16_t *rgb565 = (uint16_t *) malloc(RGB565_SIZE);  // for swap pixel data from fb->buf.
+//Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCLK, TFT_RST);
+//uint16_t *rgb565 = (uint16_t *) malloc(RGB565_SIZE);  // for swap pixel data from fb->buf.
+//uint8_t *rgb565 = (uint8_t *) malloc(RGB565_SIZE);  // for swap pixel data from fb->buf.
+
+uint16_t *tmpDecordedRgb565 = NULL;  // for JpegDec decord_output use.
 
 int interruptPin = BTN;
 bool triggerClassify = false;
+
+uint16_t  dmaBuffer1[16 * 16]; // Toggle buffer for 16*16 MCU block, 512bytes
+uint16_t  dmaBuffer2[16 * 16]; // Toggle buffer for 16*16 MCU block, 512bytes
+uint16_t* dmaBufferPtr = dmaBuffer1;
+bool dmaBufferSel = 0;
+
+TFT_eSPI tft = TFT_eSPI();         // Invoke custom library
+
+// This next function will be called during decoding of the jpeg file to render each
+// 16x16 or 8x8 image tile (Minimum Coding Unit) to the TFT.
+bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap)
+{
+  // Stop further decoding as image is running off bottom of screen
+  if ( y >= tft.height() ) return 0;
+  if (dmaBufferSel) dmaBufferPtr = dmaBuffer2;
+  else dmaBufferPtr = dmaBuffer1;
+  dmaBufferSel = !dmaBufferSel; // Toggle buffer selection
+  //  pushImageDMA() will clip the image block at screen boundaries before initiating DMA
+  tft.pushImageDMA(x, y, w, h, bitmap, dmaBufferPtr); // Initiate DMA - blocking only if last DMA is not complete
+  // The DMA transfer of image block to the TFT is now in progress...
+
+  // Return 1 to decode next block.
+  return 1;
+}
+
+bool decord_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap)
+{
+  // Stop further decoding as image is running off bottom of screen
+  if ( y >= tft.height() ) return 0;
+  if (dmaBufferSel) dmaBufferPtr = dmaBuffer2;
+  else dmaBufferPtr = dmaBuffer1;
+  dmaBufferSel = !dmaBufferSel; // Toggle buffer selection
+  //  pushImageDMA() will clip the image block at screen boundaries before initiating DMA
+  tft.pushImageDMA(x, y, w, h, bitmap, dmaBufferPtr); // Initiate DMA - blocking only if last DMA is not complete
+  // The DMA transfer of image block to the TFT is now in progress...
+
+  // Return 1 to decode next block.
+  return 1;
+}
 
 // Interrupt Service Routine (IRS) callback function, declare as IRAM_ATTR means put it in RAM (increase meet rate)
 // Note: don't know why... isr need locate above setup()
@@ -61,10 +107,29 @@ void setup() {
   // button
   pinMode(BTN, INPUT);
 
+/*
   // TFT display init
   tft.initR(INITR_GREENTAB); // you might need to use INITR_REDTAB or INITR_BLACKTAB to get correct text colors
   tft.setRotation(3);  // 1 turn 90 degrees, 2: 180, 3: 270
   tft.fillScreen(ST77XX_BLACK);
+*/
+
+  // Initialise the TFT
+  tft.init();
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_ORANGE, TFT_BLACK);
+  tft.setRotation(3);//1:landscape 3:inv. landscape
+
+  tft.initDMA(); // To use SPI DMA you must call initDMA() to setup the DMA engine
+  // The jpeg image can be scaled down by a factor of 1, 2, 4, or 8
+  TJpgDec.setJpgScale(1);
+  // The colour byte order can be swapped by the decoder
+  // using TJpgDec.setSwapBytes(true); or by the TFT_eSPI library:
+  tft.setSwapBytes(true);
+  // The decoder must be given the exact name of the rendering function above
+  TJpgDec.setCallback(tft_output);
+
 
   // cam config
   camera_config_t config;
@@ -87,10 +152,10 @@ void setup() {
   config.pin_pwdn = PWDN_GPIO_NUM;
   config.pin_reset = RESET_GPIO_NUM;
   config.xclk_freq_hz = 20000000;
-  //config.pixel_format = PIXFORMAT_JPEG;
-  config.pixel_format = PIXFORMAT_RGB565;
-  //config.frame_size =  FRAMESIZE_240X240;
-  config.frame_size =  FRAMESIZE_96X96;
+  config.pixel_format = PIXFORMAT_JPEG;
+  //config.pixel_format = PIXFORMAT_RGB565;  //FRAMESIZE_QQVGA  //FRAMESIZE_240X240
+  config.frame_size =  FRAMESIZE_240X240;
+  //config.frame_size =  FRAMESIZE_96X96;
   config.jpeg_quality = 10;
   config.fb_count = 2;
 
@@ -113,7 +178,7 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(interruptPin), isr_Callback, FALLING);  
 
   Serial.println("Camera Ready!...(standby, press button to start)");
-  //tft_drawtext(4, 4, "Standby", 1, ST77XX_BLUE);
+  //tft_drawtext(4, 4, "Standby", 1, TFT_BLUE);
 }
 
 // main loop
@@ -147,14 +212,15 @@ void loop() {
 
     // display result
     Serial.printf("Result: %s\n", result);
-    tft_drawtext(4, 120 - 16, result, 2, ST77XX_GREEN);
+    tft_drawtext(4, 120 - 16, result, 2, TFT_GREEN /*ST77XX_GREEN*/);
 
     // wait for next press button to continue show screen
     while (triggerClassify){
       delay (200);
       //Serial.printf("while triggerClassify: %d \n", triggerClassify);
     }
-    tft.fillScreen(ST77XX_BLACK);
+    //tft.fillScreen(ST77XX_BLACK);
+    tft.fillScreen(TFT_BLACK);
     //delay(1000);
   }
 }
@@ -179,69 +245,22 @@ void showScreen(camera_fb_t *fb) {
   free(rgb565);
 */
 
-  //tft.drawRGBBitmap(32, 12, (uint16_t*)fb->buf, 96, 96);  // center alignment.
-
 /*
-  // Use drawPixel ... but speed very slow ... about 1 FPS
-  unsigned long i = 0;
-  for (uint8_t y = 0; y < 96; y++) {
-    for (uint8_t x = 0; x < 96; x++) {
-      tft.drawPixel (x+32, y+12, ((fb->buf[2*i]) << 8) | (fb->buf[2*i+1]));
-      i++;
-    }
-  }
-*/
-
 memcpy (rgb565, fb->buf, RGB565_SIZE);
 for (uint32_t index = 0; index < RGB565_SIZE/2; index++) {
-  *(rgb565 + index) = __builtin_bswap16(*(rgb565 + index));
+  *(rgb565 + index) = __builtin_bswap16(*(rgb565 + index));  //need to swap uint16_t data for RGB draw
 }
 tft.drawRGBBitmap((TFT_LCD_WIDTH-SHOW_WIDTH)/2, (TFT_LCD_HEIGHT-SHOW_HEIGHT)/2, rgb565, SHOW_WIDTH, SHOW_HEIGHT);
-/*
-int  x, y;
-  Serial.printf("PIXFORMAT_RGB565 96x96, format:%d, len:%d, width:%d, height:%d\n", fb->format, fb->len, fb->width, fb->height);
-  for (x=0; x<1; x++) {
-    for (y=0; y<32; y++) {
-      Serial.printf ("%02x ", fb->buf[x*96 + y]);
-      if (y%16 == 15) {
-        Serial.printf ("\n");
-      }
-    }
-  }
-
-  Serial.println("uint16_t:");
-  for (x=0; x<1; x++) {
-    for (y=0; y<32; y++) {
-      Serial.printf ("%04x ", *(((uint16_t *)fb->buf) + (x*96 + y)) );
-      if (y%16 == 15) {
-        Serial.printf ("\n");
-      }
-    }
-  }
-
-  Serial.println("===rgb565===:");
-
-  for (x=0; x<1; x++) {
-    for (y=0; y<32; y++) {
-      Serial.printf ("%02x ", *(((uint8_t *)rgb565) + (x*96 + y)));
-      if (y%16 == 15) {
-        Serial.printf ("\n");
-      }
-    }
-  }
-
-  Serial.println("uint16_t:");
-  for (x=0; x<1; x++) {
-    for (y=0; y<32; y++) {
-      Serial.printf ("%04x ", rgb565[x*96 + y] );
-      if (y%16 == 15) {
-        Serial.printf ("\n");
-      }
-    }
-  }
-
-  while (!digitalRead(BTN));
 */
+
+  tft.startWrite();
+  // Draw the image, top left at 0,0 - DMA request is handled in the call-back tft_output() in this sketch
+  //TJpgDec.drawJpg(0, 0, panda, sizeof(panda));
+ // TJpgDec.drawJpg((TFT_LCD_WIDTH-SHOW_WIDTH)/2, (TFT_LCD_HEIGHT-SHOW_HEIGHT)/2,  fb->buf, fb->len);
+  TJpgDec.drawJpg(0, 0, fb->buf, fb->len);
+  // Must use endWrite to release the TFT chip select and release the SPI channel
+  tft.endWrite();
+
 }
 
 // classify labels
@@ -253,7 +272,7 @@ String classify() {
 
   // capture image from camera
   if (!capture()) return "Error";
-  tft_drawtext(4, 4, "Classifying...", 1, ST77XX_CYAN);
+  tft_drawtext(4, 4, "Classifying...", 1, TFT_CYAN /*ST77XX_CYAN*/);
 
   Serial.println("  Getting image...");
   signal_t signal;
@@ -285,7 +304,7 @@ String classify() {
       index = ix;
     }
     ei_printf("    %s: \t%f\r\n", result.classification[ix].label, result.classification[ix].value);
-    tft_drawtext(4, 12 + 8 * ix, String(result.classification[ix].label) + " " + String(result.classification[ix].value * 100) + "%", 1, ST77XX_ORANGE);
+    tft_drawtext(4, 12 + 8 * ix, String(result.classification[ix].label) + " " + String(result.classification[ix].value * 100) + "%", 1, TFT_ORANGE /*ST77XX_ORANGE*/);
   }
 
 #if EI_CLASSIFIER_HAS_ANOMALY == 1
@@ -320,15 +339,32 @@ bool capture() {
   Serial.println("Converting to RGB888...");
   // Allocate rgb888_matrix buffer
   dl_matrix3du_t *rgb888_matrix = dl_matrix3du_alloc(1, fb->width, fb->height, 3);
-  fmt2rgb888(fb->buf, fb->len, fb->format, rgb888_matrix->item);
+  //Serial.println("fmt2rgb888...");  
+  //fmt2rgb888(fb->buf, fb->len, fb->format, rgb888_matrix->item);
 
-/*
+  Serial.println("TJpgDec.setCallback(decord_output);...");  
+  tmpDecordedRgb565 = (uint16_t *) malloc(RGB565_SIZE);
+  TJpgDec.setCallback(decord_output);
+  TJpgDec.drawJpg(0, 0, fb->buf, fb->len);
+
+  // rollback TJpgDec.setCallback(tft_output);
+  Serial.println("rollback TJpgDec.setCallback(tft_output);...");  
+  TJpgDec.setCallback(tft_output);
+
+  Serial.println("fmt2rgb888...from TJpegDec RGB5656");  
+  fmt2rgb888((uint8_t *)tmpDecordedRgb565, fb->len, PIXFORMAT_RGB565, rgb888_matrix->item);
+
+  //Serial.println("memcpy...");  
+  //memcpy (rgb565, fb->buf, fb->len);
+  //Serial.println("fmt2rgb888...");  
+  //fmt2rgb888(rgb565, fb->len, fb->format, rgb888_matrix->item);
+
   // --- Resize the RGB888 frame to 96x96 in this example ---
   Serial.println("Resizing the frame buffer...");
   resized_matrix = dl_matrix3du_alloc(1, EI_CLASSIFIER_INPUT_WIDTH, EI_CLASSIFIER_INPUT_HEIGHT, 3);
   image_resize_linear(resized_matrix->item, rgb888_matrix->item, EI_CLASSIFIER_INPUT_WIDTH, EI_CLASSIFIER_INPUT_HEIGHT, 3, fb->width, fb->height);
-*/
-  resized_matrix = rgb888_matrix; // if do not need to resize, we can use rgb888_matrix to classify directly.
+
+  //resized_matrix = rgb888_matrix; // if do not need to resize, we can use rgb888_matrix to classify directly.
   showScreen(fb);
 /*
   // --- Convert frame to RGB565 and display on the TFT ---
@@ -343,8 +379,9 @@ bool capture() {
 */
 
   // --- Free memory ---
-  //dl_matrix3du_free(rgb888_matrix);  // don't free rgb888_matrix due to it assign to resized_matrix and resized_matrix will be free in up function.
+  dl_matrix3du_free(rgb888_matrix);  // don't free rgb888_matrix due to it assign to resized_matrix and resized_matrix will be free in up function.
   esp_camera_fb_return(fb);
+  free(tmpDecordedRgb565);
 
   return true;
 }
@@ -378,9 +415,16 @@ int raw_feature_get_data(size_t offset, size_t out_len, float *signal_ptr) {
 
 // draw test on TFT
 void tft_drawtext(int16_t x, int16_t y, String text, uint8_t font_size, uint16_t color) {
+/*  
   tft.setCursor(x, y);
   tft.setTextSize(font_size); // font size 1 = 6x8, 2 = 12x16, 3 = 18x24
   tft.setTextColor(color);
   tft.setTextWrap(true);
   tft.print(strcpy(new char[text.length() + 1], text.c_str()));
+*/
+
+tft.setCursor (x, y, font_size);
+tft.setTextColor(color);
+tft.print(strcpy(new char[text.length() + 1], text.c_str()));
+
 }
