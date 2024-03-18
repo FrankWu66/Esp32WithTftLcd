@@ -60,6 +60,8 @@ bool dmaBufferSel = 0;
 
 TFT_eSPI tft = TFT_eSPI();         // Invoke custom library
 
+//uint16_t outputIndex = 0;
+
 // This next function will be called during decoding of the jpeg file to render each
 // 16x16 or 8x8 image tile (Minimum Coding Unit) to the TFT.
 bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap)
@@ -72,7 +74,8 @@ bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap)
   //  pushImageDMA() will clip the image block at screen boundaries before initiating DMA
   tft.pushImageDMA(x, y, w, h, bitmap, dmaBufferPtr); // Initiate DMA - blocking only if last DMA is not complete
   // The DMA transfer of image block to the TFT is now in progress...
-
+  //outputIndex++;
+  //Serial.printf("    tft_output:%d , x: %d, y: %d, w: %d, h:%d, memcpy size: %d\n", outputIndex, x, y, w, h);
   // Return 1 to decode next block.
   return 1;
 }
@@ -85,7 +88,13 @@ bool decord_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitma
 
   if (tmpDecordedRgb565 == NULL) return 0;
 
-  memcpy (tmpDecordedRgb565, bitmap, w*h);
+  //each call this function, only draw w:16, h:8 for each x,y region set.
+  for (uint16_t indexh=0; indexh < h; indexh++) {
+    memcpy ( (tmpDecordedRgb565 + y*240 + x), bitmap, w*2);
+  }
+  //memcpy (tmpDecordedRgb565, bitmap, w*h*2);
+  //outputIndex++;
+  //Serial.printf("    decord_output:%d , x: %d, y: %d, w: %d, h:%d, memcpy size: %d\n", outputIndex, x, y, w, h , w*h*2);
 
   return 1;
 }
@@ -193,7 +202,7 @@ void loop() {
   }
   //Serial.println("Start show screen.");
   StartTime = millis();
-  showScreen(fb);
+  showScreen(fb, TFT_YELLOW);
   EndTime = millis();
   Serial.printf("Show screen. spend time: %d ms\n", EndTime - StartTime);
   esp_camera_fb_return(fb);
@@ -223,7 +232,7 @@ void loop() {
   }
 }
 
-void showScreen(camera_fb_t *fb) {
+void showScreen(camera_fb_t *fb, uint16_t color) {
   //int StartTime, EndTime;
 
 /*
@@ -255,9 +264,11 @@ tft.drawRGBBitmap((TFT_LCD_WIDTH-SHOW_WIDTH)/2, (TFT_LCD_HEIGHT-SHOW_HEIGHT)/2, 
   // Draw the image, top left at 0,0 - DMA request is handled in the call-back tft_output() in this sketch
   //TJpgDec.drawJpg(0, 0, panda, sizeof(panda));
  // TJpgDec.drawJpg((TFT_LCD_WIDTH-SHOW_WIDTH)/2, (TFT_LCD_HEIGHT-SHOW_HEIGHT)/2,  fb->buf, fb->len);
-  TJpgDec.drawJpg(0, 0, fb->buf, fb->len);
+  TJpgDec.drawJpg(-56, -40, fb->buf, fb->len);
   // Must use endWrite to release the TFT chip select and release the SPI channel
   tft.endWrite();
+  //drawRect(int32_t x, int32_t y, int32_t w, int32_t h, uint32_t color),
+  tft.drawRect (32, 16, 96, 96, color);
 
 }
 
@@ -341,7 +352,7 @@ bool capture() {
   //fmt2rgb888(fb->buf, fb->len, fb->format, rgb888_matrix->item);
 
   Serial.println("TJpgDec.setCallback(decord_output);...");  
-  tmpDecordedRgb565 = (uint16_t *) malloc(RGB565_SIZE);
+  tmpDecordedRgb565 = (uint16_t *) malloc(240*240*2);
   tft.setSwapBytes(false);
   TJpgDec.setCallback(decord_output);
   TJpgDec.drawJpg(0, 0, fb->buf, fb->len);
@@ -351,8 +362,18 @@ bool capture() {
   tft.setSwapBytes(true);
   TJpgDec.setCallback(tft_output);
 
-  Serial.println("fmt2rgb888...from TJpegDec RGB5656");  
+  Serial.printf("fmt2rgb888...from TJpegDec RGB5656, fb->width:%d, fb->height:%d\n", fb->width, fb->height);  
   fmt2rgb888((uint8_t *)tmpDecordedRgb565, fb->width * fb->height * 2, PIXFORMAT_RGB565, rgb888_matrix->item);
+
+  /*
+  for (uint32_t tt=0; tt < fb->width * fb->height * 2; tt++) {
+    Serial.printf("%02x ", *(rgb888_matrix->item + tt) );
+    if (tt % 60 == 0) {
+      Serial.println(" ");
+    }
+  }
+  Serial.println(" zz");
+*/
 
   //Serial.println("memcpy...");  
   //memcpy (rgb565, fb->buf, fb->len);
@@ -365,7 +386,7 @@ bool capture() {
   image_resize_linear(resized_matrix->item, rgb888_matrix->item, EI_CLASSIFIER_INPUT_WIDTH, EI_CLASSIFIER_INPUT_HEIGHT, 3, fb->width, fb->height);
 
   //resized_matrix = rgb888_matrix; // if do not need to resize, we can use rgb888_matrix to classify directly.
-  showScreen(fb);
+  showScreen(fb, TFT_RED);
 /*
   // --- Convert frame to RGB565 and display on the TFT ---
   Serial.println("Converting to RGB565 and display on TFT...");
