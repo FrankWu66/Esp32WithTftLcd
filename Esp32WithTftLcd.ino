@@ -30,7 +30,7 @@ Note: Modify below Library file:
 
 2. C:\Users\{account}\Documents\Arduino\libraries\TJpg_Decoder\src\TJpg_Decoder.h
 <insert below line 104: "bool _swap = false;">
-  void setFormat(int jdFormat);
+  void setFormat(uint8_t jdFormat);
   uint8_t  _jdFormat = JD_FORMAT;
 
 3. C:\Users\{account}\Documents\Arduino\libraries\TJpg_Decoder\src\TJpg_Decoder.cpp
@@ -41,7 +41,7 @@ Note: Modify below Library file:
 //  1: RGB565 (16-bit/pix)
 //  2: Grayscale (8-bit/pix)
 //
-void TJpg_Decoder::setFormat(int jdFormat){
+void TJpg_Decoder::setFormat(uint8_t jdFormat){
   _jdFormat = jdFormat;
 }
 
@@ -53,6 +53,14 @@ void TJpg_Decoder::setFormat(int jdFormat){
 	// Convert RGB888(0) to RGB565(1) if needed 
 	//if (JD_FORMAT == 1) {
   if (jd->jdFormat == 1) {
+
+<Modify line 979: "jd_prepare" as below>
+...
+  uint8_t tmp = jd->swap; // Copy the swap flag
+  uint8_t tmp2 = jd->jdFormat;
+...
+  jd->swap = tmp; // Restore the swap flag
+  jd->jdFormat = tmp2;
 
 5. C:\Users\{account}\Documents\Arduino\libraries\TJpg_Decoder\src\tjpgd.h
 <inser below line 89: uint8_t swap;>
@@ -187,6 +195,7 @@ void setup() {
   // The colour byte order can be swapped by the decoder
   // using TJpgDec.setSwapBytes(true); or by the TFT_eSPI library:
   tft.setSwapBytes(true);
+  //TJpgDec.setSwapBytes(true);
   // The decoder must be given the exact name of the rendering function above
   TJpgDec.setCallback(tft_output);
 
@@ -408,7 +417,7 @@ bool capture() {
   tmpDecordedRgb888 = rgb888_matrix->item; //(uint16_t *) malloc(240*240*3);
   //tft.setSwapBytes(false);
   // TJpgDec.setSwapBytes(false); default is false?
-  TJpgDec.setFormat (0); // 0: RGB888 (24-bit/pix)
+  //TJpgDec.setFormat (0); // 0: RGB888 (24-bit/pix)
   TJpgDec.setCallback(decord_output);
   TJpgDec.drawJpg(0, 0, fb->buf, fb->len);
 
@@ -416,7 +425,7 @@ bool capture() {
   Serial.println("rollback TJpgDec.setCallback(tft_output);...");  
   //tft.setSwapBytes(true);
   //TJpgDec.setSwapBytes(true); default is false?
-  TJpgDec.setFormat (1); // 1: RGB565 (16-bit/pix) , default value
+  //TJpgDec.setFormat (1); // 1: RGB565 (16-bit/pix) , default value
   TJpgDec.setCallback(tft_output);
 
   Serial.printf("fmt2rgb888...from TJpegDec RGB5656, fb->width:%d, fb->height:%d\n", fb->width, fb->height);  
