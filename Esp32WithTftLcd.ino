@@ -121,7 +121,7 @@ bool dmaBufferSel = 0;
 
 TFT_eSPI tft = TFT_eSPI();         // Invoke custom library
 
-//uint16_t outputIndex = 0;
+uint16_t outputIndex = 0;
 
 // This next function will be called during decoding of the jpeg file to render each
 // 16x16 or 8x8 image tile (Minimum Coding Unit) to the TFT.
@@ -151,11 +151,11 @@ bool decord_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitma
 
   //each call this function, only draw w:16, h:8 for each x,y region set.
   for (uint16_t indexh=0; indexh < h; indexh++) {
-    memcpy ( (tmpDecordedRgb888 + y*240*3 + x*3), bitmap, w*3);
+    memcpy ( (tmpDecordedRgb888 + (y+indexh)*240*3 + x*3), bitmap, w*3);
   }
   //memcpy (tmpDecordedRgb888, bitmap, w*h*2);
-  //outputIndex++;
-  //Serial.printf("    decord_output:%d , x: %d, y: %d, w: %d, h:%d, memcpy size: %d\n", outputIndex, x, y, w, h , w*h*2);
+  outputIndex++;
+  Serial.printf("    decord_output:%d , x: %d, y: %d, w: %d, h:%d, memcpy size: %d, addr: 0x%x\n", outputIndex, x, y, w, h , w*3,  (tmpDecordedRgb888 + (y+indexh)*240*3 + x*3));
 
   return 1;
 }
@@ -419,6 +419,7 @@ bool capture() {
   // TJpgDec.setSwapBytes(false); default is false?
   //TJpgDec.setFormat (0); // 0: RGB888 (24-bit/pix)
   TJpgDec.setCallback(decord_output);
+  outputIndex = 0;
   TJpgDec.drawJpg(0, 0, fb->buf, fb->len);
 
   // rollback TJpgDec.setCallback(tft_output);
