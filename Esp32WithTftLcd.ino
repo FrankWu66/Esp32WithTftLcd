@@ -8,6 +8,59 @@
   Do not use Arduino IDE 2.0 or you won't be able to see the serial output!
 */
 
+
+/*
+Note: Modify below Library file:
+1. C:\Users\{account}\Documents\Arduino\libraries\TFT_eSPI\User_Setup.h
+<only remain below, comment others (musb comment!)
+#define USER_SETUP_INFO "User_Setup"
+#define ST7735_DRIVER
+#define TFT_WIDTH  128
+#define TFT_HEIGHT 160
+#define ST7735_GREENTAB
+#define LOAD_GLCD   // Font 1. Original Adafruit 8 pixel font needs ~1820 bytes in FLASH
+#define LOAD_FONT2  // Font 2. Small 16 pixel high font, needs ~3534 bytes in FLASH, 96 characters
+#define LOAD_FONT4  // Font 4. Medium 26 pixel high font, needs ~5848 bytes in FLASH, 96 characters
+#define LOAD_FONT6  // Font 6. Large 48 pixel font, needs ~2666 bytes in FLASH, only characters 1234567890:-.apm
+#define LOAD_FONT7  // Font 7. 7 segment 48 pixel font, needs ~2438 bytes in FLASH, only characters 1234567890:-.
+#define LOAD_FONT8  // Font 8. Large 75 pixel font needs ~3256 bytes in FLASH, only characters 1234567890:-.
+#define LOAD_GFXFF  // FreeFonts. Include access to the 48 Adafruit_GFX free fonts FF1 to FF48 and custom fonts
+#define SMOOTH_FONT
+#define SPI_FREQUENCY  27000000
+
+2. C:\Users\{account}\Documents\Arduino\libraries\TJpg_Decoder\src\TJpg_Decoder.h
+<insert below line 104: "bool _swap = false;">
+  void setFormat(int jdFormat);
+  uint8_t  _jdFormat = JD_FORMAT;
+
+3. C:\Users\{account}\Documents\Arduino\libraries\TJpg_Decoder\src\TJpg_Decoder.cpp
+<insert below line 36: "void TJpg_Decoder::setSwapBytes(bool swapBytes){">
+// for user to change JD_FORMAT
+// Specifies output pixel format.
+//  0: RGB888 (24-bit/pix)
+//  1: RGB565 (16-bit/pix)
+//  2: Grayscale (8-bit/pix)
+//
+void TJpg_Decoder::setFormat(int jdFormat){
+  _jdFormat = jdFormat;
+}
+
+<inser below line 525: jdec.swap = _swap;>
+  jdec.jdFormat = _jdFormat;
+
+4. C:\Users\{account}\Documents\Arduino\libraries\TJpg_Decoder\src\tjpgd.c
+<Modify line 934: "if (JD_FORMAT == 1) {" as below>
+	// Convert RGB888(0) to RGB565(1) if needed 
+	//if (JD_FORMAT == 1) {
+  if (jd->jdFormat == 1) {
+
+5. C:\Users\{account}\Documents\Arduino\libraries\TJpg_Decoder\src\tjpgd.h
+<inser below line 89: uint8_t swap;>
+	uint8_t jdFormat;
+
+
+*/
+
 #include <esp32-cam-cat-dog_inferencing.h>  // replace with your deployed Edge Impulse library
 
 #define CAMERA_MODEL_AI_THINKER
@@ -48,7 +101,7 @@ ei_impulse_result_t result = {0};
 //uint16_t *rgb565 = (uint16_t *) malloc(RGB565_SIZE);  // for swap pixel data from fb->buf.
 //uint8_t *rgb565 = (uint8_t *) malloc(RGB565_SIZE);  // for swap pixel data from fb->buf.
 
-uint16_t *tmpDecordedRgb565 = NULL;  // for JpegDec decord_output use.
+uint8_t *tmpDecordedRgb888 = NULL;  // for JpegDec decord_output use.
 
 int interruptPin = BTN;
 bool triggerClassify = false;
@@ -86,13 +139,13 @@ bool decord_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitma
   if ( y >= tft.height() ) return 0;
   //tft.pushImageDMA(x, y, w, h, bitmap, dmaBufferPtr); // Initiate DMA - blocking only if last DMA is not complete
 
-  if (tmpDecordedRgb565 == NULL) return 0;
+  if (tmpDecordedRgb888 == NULL) return 0;
 
   //each call this function, only draw w:16, h:8 for each x,y region set.
   for (uint16_t indexh=0; indexh < h; indexh++) {
-    memcpy ( (tmpDecordedRgb565 + y*240 + x), bitmap, w*2);
+    memcpy ( (tmpDecordedRgb888 + y*240*3 + x*3), bitmap, w*3);
   }
-  //memcpy (tmpDecordedRgb565, bitmap, w*h*2);
+  //memcpy (tmpDecordedRgb888, bitmap, w*h*2);
   //outputIndex++;
   //Serial.printf("    decord_output:%d , x: %d, y: %d, w: %d, h:%d, memcpy size: %d\n", outputIndex, x, y, w, h , w*h*2);
 
@@ -352,18 +405,22 @@ bool capture() {
   //fmt2rgb888(fb->buf, fb->len, fb->format, rgb888_matrix->item);
 
   Serial.println("TJpgDec.setCallback(decord_output);...");  
-  tmpDecordedRgb565 = (uint16_t *) malloc(240*240*2);
-  tft.setSwapBytes(false);
+  tmpDecordedRgb888 = rgb888_matrix->item; //(uint16_t *) malloc(240*240*3);
+  //tft.setSwapBytes(false);
+  // TJpgDec.setSwapBytes(false); default is false?
+  TJpgDec.setFormat (0); // 0: RGB888 (24-bit/pix)
   TJpgDec.setCallback(decord_output);
   TJpgDec.drawJpg(0, 0, fb->buf, fb->len);
 
   // rollback TJpgDec.setCallback(tft_output);
   Serial.println("rollback TJpgDec.setCallback(tft_output);...");  
-  tft.setSwapBytes(true);
+  //tft.setSwapBytes(true);
+  //TJpgDec.setSwapBytes(true); default is false?
+  TJpgDec.setFormat (1); // 1: RGB565 (16-bit/pix) , default value
   TJpgDec.setCallback(tft_output);
 
   Serial.printf("fmt2rgb888...from TJpegDec RGB5656, fb->width:%d, fb->height:%d\n", fb->width, fb->height);  
-  fmt2rgb888((uint8_t *)tmpDecordedRgb565, fb->width * fb->height * 2, PIXFORMAT_RGB565, rgb888_matrix->item);
+  //fmt2rgb888((uint8_t *)tmpDecordedRgb888, fb->width * fb->height * 2, PIXFORMAT_RGB565, rgb888_matrix->item);
 
   /*
   for (uint32_t tt=0; tt < fb->width * fb->height * 2; tt++) {
@@ -402,7 +459,7 @@ bool capture() {
   // --- Free memory ---
   dl_matrix3du_free(rgb888_matrix);  // don't free rgb888_matrix due to it assign to resized_matrix and resized_matrix will be free in up function.
   esp_camera_fb_return(fb);
-  free(tmpDecordedRgb565);
+  //free(tmpDecordedRgb888);
 
   return true;
 }
