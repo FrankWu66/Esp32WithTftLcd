@@ -149,13 +149,15 @@ bool decord_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitma
 
   if (tmpDecordedRgb888 == NULL) return 0;
 
+  outputIndex++;
+
   //each call this function, only draw w:16, h:8 for each x,y region set.
   for (uint16_t indexh=0; indexh < h; indexh++) {
     memcpy ( (tmpDecordedRgb888 + (y+indexh)*240*3 + x*3), bitmap, w*3);
+    Serial.printf("    decord_output:%d , x: %d, y: %d, w: %d, h:%d, memcpy size: %d, addr: 0x%x\n", outputIndex, x, y, w, h , w*3,  (tmpDecordedRgb888 + (y+indexh)*240*3 + x*3));
   }
   //memcpy (tmpDecordedRgb888, bitmap, w*h*2);
-  outputIndex++;
-  Serial.printf("    decord_output:%d , x: %d, y: %d, w: %d, h:%d, memcpy size: %d, addr: 0x%x\n", outputIndex, x, y, w, h , w*3,  (tmpDecordedRgb888 + (y+indexh)*240*3 + x*3));
+
 
   return 1;
 }
