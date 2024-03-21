@@ -109,7 +109,7 @@ ei_impulse_result_t result = {0};
 //uint16_t *rgb565 = (uint16_t *) malloc(RGB565_SIZE);  // for swap pixel data from fb->buf.
 //uint8_t *rgb565 = (uint8_t *) malloc(RGB565_SIZE);  // for swap pixel data from fb->buf.
 
-uint8_t *tmpDecordedRgb888 = NULL;  // for JpegDec decord_output use.
+uint16_t *tmpDecordedRgb565 = NULL;  // for JpegDec decord_output use.
 
 int interruptPin = BTN;
 bool triggerClassify = false;
@@ -144,18 +144,21 @@ bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap)
 bool decord_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap)
 {
   // Stop further decoding as image is running off bottom of screen
-  if ( y >= tft.height() ) return 0;
+  //if ( y >= tft.height() ) {Serial.printf("  tft.height():%d", tft.height());return 0;  }
   //tft.pushImageDMA(x, y, w, h, bitmap, dmaBufferPtr); // Initiate DMA - blocking only if last DMA is not complete
 
-  if (tmpDecordedRgb888 == NULL) return 0;
+  //if (x > 0) return 1; 
+
+  if (tmpDecordedRgb565 == NULL) return 0;
 
   outputIndex++;
   //each call this function, only draw w:16, h:8 for each x,y region set.
   for (uint16_t indexh=0; indexh < h; indexh++) {
-    memcpy ( (tmpDecordedRgb888 + (y+indexh)*240*3 + x*3), ((uint8_t*)bitmap)+indexh*w*3, w*3);
-    //Serial.printf("    decord_output:%d , x: %d, y: %d, w: %d, h:%d, memcpy size: %d, addr: 0x%x\n", outputIndex, x, y, w, h , w*3,  (tmpDecordedRgb888 + (y+indexh)*240*3 + x*3));
+    //memcpy ( (tmpDecordedRgb565 + (y+indexh)*240*3 + x*3), ((uint8_t*)bitmap)+indexh*w*3, w*3);
+    memcpy ( (tmpDecordedRgb565 + (y+indexh)*240 + x), bitmap+(indexh*w), w*2);
+    //Serial.printf("    decord_output:%d , x: %d, y: %d, w: %d, h:%d, memcpy size: %d, addr: 0x%x, bitmap: 0x%x\n", outputIndex, x, y, w, h , w*2,  (tmpDecordedRgb565 + (y+indexh)*240 + x), bitmap+indexh*w);
   }
-
+tft.pushImage(x+80, y, w, h, bitmap);
   return 1;
 }
 
@@ -413,7 +416,8 @@ bool capture() {
   //fmt2rgb888(fb->buf, fb->len, fb->format, rgb888_matrix->item);
 
   Serial.println("TJpgDec.setCallback(decord_output);...");  
-  tmpDecordedRgb888 = rgb888_matrix->item; //(uint16_t *) malloc(240*240*3);
+  tmpDecordedRgb565 = (uint16_t *) malloc(240*240*2);
+  memset(tmpDecordedRgb565, 0x0, 240*240*2);
   //tft.setSwapBytes(false);
   // TJpgDec.setSwapBytes(false); default is false?
   //TJpgDec.setFormat (0); // 0: RGB888 (24-bit/pix)
@@ -429,7 +433,7 @@ bool capture() {
   TJpgDec.setCallback(tft_output);
 
   Serial.printf("fmt2rgb888...from TJpegDec RGB5656, fb->width:%d, fb->height:%d\n", fb->width, fb->height);  
-  //fmt2rgb888((uint8_t *)tmpDecordedRgb888, fb->width * fb->height * 2, PIXFORMAT_RGB565, rgb888_matrix->item);
+  fmt2rgb888((uint8_t *)tmpDecordedRgb565, fb->width * fb->height * 2, PIXFORMAT_RGB565, rgb888_matrix->item);
 
   /*
   for (uint32_t tt=0; tt < fb->width * fb->height * 2; tt++) {
@@ -452,7 +456,18 @@ bool capture() {
   image_resize_linear(resized_matrix->item, rgb888_matrix->item, EI_CLASSIFIER_INPUT_WIDTH, EI_CLASSIFIER_INPUT_HEIGHT, 3, fb->width, fb->height);
 
   //resized_matrix = rgb888_matrix; // if do not need to resize, we can use rgb888_matrix to classify directly.
-  showScreen(fb, TFT_RED);
+  //showScreen(fb, TFT_RED);
+  delay(2000);
+  tft.pushImage(0, 0, 240, 240, tmpDecordedRgb565);
+  /*
+  memset(tmpDecordedRgb565, 0x44, 40*240*2);
+  memset(tmpDecordedRgb565+(40*240), 0x88, 80*240*2);
+  memset(tmpDecordedRgb565+(80*240), 0xcc, 80*240*2);
+  delay(5000);
+  tft.pushImage(0, 0, 240, 240, tmpDecordedRgb565);
+  */
+
+
 /*
   // --- Convert frame to RGB565 and display on the TFT ---
   Serial.println("Converting to RGB565 and display on TFT...");
@@ -468,7 +483,7 @@ bool capture() {
   // --- Free memory ---
   dl_matrix3du_free(rgb888_matrix);  // don't free rgb888_matrix due to it assign to resized_matrix and resized_matrix will be free in up function.
   esp_camera_fb_return(fb);
-  //free(tmpDecordedRgb888);
+  free(tmpDecordedRgb565);
 
   return true;
 }
