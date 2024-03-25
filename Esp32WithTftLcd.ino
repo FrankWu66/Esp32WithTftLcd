@@ -93,7 +93,7 @@ void TJpg_Decoder::setFormat(uint8_t jdFormat){
                     // BL (back light) and VCC -> 3V3
 
 #define BTN       4 // button (shared with flash led)
-#define BTN_CONTROL false   // true: use button to capture and classify; false: loop to capture and classify.
+#define BTN_CONTROL true   // true: use button to capture and classify; false: loop to capture and classify.
 #define FAST_CLASSIFY 1
 
 #define SHOW_WIDTH  96
@@ -177,8 +177,10 @@ void IRAM_ATTR isr_Callback() {
 void setup() {
   Serial.begin(115200);
 
+#if BTN_CONTROL == true  
   // button
   pinMode(BTN, INPUT);
+#endif
 
 /*
   // TFT display init
@@ -304,8 +306,8 @@ void loop() {
   uint16_t delayTime = 6000;
   Serial.printf("Finish classify, wait for %d ms to next loop.\n\n\n", delayTime);
   delay(delayTime);
-  tft.fillScreen(TFT_BLACK);
 #endif
+  tft.fillScreen(TFT_BLACK);
   Serial.println("Finish classify.\n");
 #endif 
 
@@ -316,8 +318,11 @@ void showScreen(camera_fb_t *fb, uint16_t color) {
   //int StartTime, EndTime;
 
   // Note: larger than 96x96 may draw a not identify screen, need to separate screen and do multi pushImage.
+//#if BTN_CONTROL == true    
   tft.pushImage((TFT_LCD_WIDTH-SHOW_WIDTH)/2, (TFT_LCD_HEIGHT-SHOW_HEIGHT)/2, SHOW_WIDTH, SHOW_HEIGHT, (uint16_t *)fb->buf);
-
+//#else
+//  tft.pushImage((TFT_LCD_WIDTH-SHOW_WIDTH), (TFT_LCD_HEIGHT-SHOW_HEIGHT), SHOW_WIDTH, SHOW_HEIGHT, (uint16_t *)fb->buf);  
+//#endif
 /*
   // --- Convert frame to RGB565 and display on the TFT ---
   Serial.println("  Converting to RGB565 and display on TFT...");
